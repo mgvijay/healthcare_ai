@@ -470,11 +470,6 @@ async def main(query: str, runner: Runner) -> None:
         runner: The Runner instance for the agent.
     """
     
-    # If the user directly asked to show records, handle at root level first.
-    if "show records" in query.lower() or "display records" in query.lower() or "view records" in query.lower():
-        root_handle_show_records()
-        return
-
     content = types.Content(role="user", parts=[types.Part(text=query)])
     
     events = runner.run_async(
@@ -635,6 +630,10 @@ async def interactive_session(runner: Runner, session_service: InMemorySessionSe
             if not user_query:
                 print("⚠️  Please enter a valid question.")
                 continue
+            
+            if "show records" in user_query.lower() or "display records" in user_query.lower() or "view records" in user_query.lower():
+                root_handle_show_records()
+                continue # Skip remaining logic for this turn
             
             if first_interaction:
                 enriched_query = await _handle_first_interaction(user_query)

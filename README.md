@@ -70,6 +70,14 @@ uvicorn audit_server:app --reload
 
 The audit server will be available at `http://127.0.0.1:8000`.
 
+**Note on Virtual Environment Usage:**
+If you encounter issues where `uvicorn` does not start or reports missing packages (e.g., `jinja2`), it might be due to `uvicorn` not picking up the correct Python environment. To ensure `uvicorn` runs within your project's virtual environment (`venv`), you can explicitly call the `uvicorn.exe` located within it. For example, if your virtual environment is named `venv` and is in your project's root directory, you can use:
+
+```bash
+& ./venv/Scripts/uvicorn.exe audit_server:app --reload
+```
+(Adjust the path to `uvicorn.exe` if your virtual environment is located elsewhere.)
+
 ### 3. Government Audit Agent
 
 To run the government audit agent, execute the following command:
