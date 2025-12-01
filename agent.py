@@ -17,6 +17,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy import inspect
 from google.adk.tools import FunctionTool
 from datetime import datetime
+from sqlalchemy.sql import func
 
 from subagents.ent.agent import ent_doctor_assistant
 from subagents.gynec.agent import gynec_doctor_assistant
@@ -46,7 +47,7 @@ class PatientDetails(Base):
     name = Column(String, nullable=False) 
     age = Column(Integer, nullable=False)
     weight = Column(Float, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, server_default=func.now())
     
     def __init__(self, name, age, weight=None):
         self.name = name
@@ -72,9 +73,15 @@ print("✅ Database and tables created successfully.")
 
 
 def ensure_weight_column(engine):
-    """Ensure the `weight` column exists on `patient_details`. Adds it if missing.
+    """
+    Checks if the 'weight' column exists in the 'patient_details' table and adds it if it is missing.
 
-    This runs a safe ALTER TABLE for SQLite when needed.
+    This function is a lightweight database migration utility that ensures the schema is up-to-date
+    with the application's requirements. It uses SQLAlchemy's inspection capabilities to check for the
+    presence of the column before attempting to add it.
+
+    Args:
+        engine: The SQLAlchemy engine instance for the database connection.
     """
     try:
         inspector = inspect(engine)
@@ -101,7 +108,17 @@ ensure_weight_column(engine)
 # Database Helper Functions
 # ============================================
 def insert_patient_record(name: str, age: int, weight: float = None) -> PatientDetails:
-    """Insert a new patient record into the database."""
+    """
+    Inserts a new patient record into the database.
+
+    Args:
+        name: The name of the patient.
+        age: The age of the patient.
+        weight: The weight of the patient (optional).
+
+    Returns:
+        The created PatientDetails object, or None if an error occurred.
+    """
     session = Session()
     try:
         patient = PatientDetails(name=name, age=age, weight=weight)
@@ -118,7 +135,12 @@ def insert_patient_record(name: str, age: int, weight: float = None) -> PatientD
 
 
 def get_all_patient_records() -> list:
-    """Retrieve all patient records from the database."""
+    """
+    Retrieves all patient records from the database.
+
+    Returns:
+        A list of PatientDetails objects.
+    """
     session = Session()
     try:
         patients = session.query(PatientDetails).all()
@@ -131,7 +153,13 @@ def get_all_patient_records() -> list:
 
 
 def display_patient_records() -> str:
-    """Display all patient records in a formatted table and return as string."""
+    """
+    Formats all patient records into a string table.
+
+    Returns:
+        A formatted string representing the patient records in a table,
+        or a message if no records are found.
+    """
     patients = get_all_patient_records()
     
     if not patients:
@@ -152,7 +180,12 @@ def display_patient_records() -> str:
 
 
 def get_patient_records_json() -> dict:
-    """Return patient records as JSON for API access."""
+    """
+    Retrieves all patient records and returns them in a JSON-serializable format.
+
+    Returns:
+        A dictionary containing the count of records and a list of patient records as dictionaries.
+    """
     patients = get_all_patient_records()
     return {
         'count': len(patients),
@@ -162,8 +195,16 @@ def get_patient_records_json() -> dict:
 
 def show_patient_records_secure(security_code: str) -> str:
     """
-    Securely display patient records only if correct security code is provided.
-    This function is exposed to the agent as a tool (used by A2A calls).
+    Securely displays patient records only if the correct security code is provided.
+
+    This function is exposed to the agent as a tool and is intended to be used for
+    Agent-to-Agent (A2A) communication.
+
+    Args:
+        security_code: The security code provided by the calling agent.
+
+    Returns:
+        A formatted string of patient records if the code is correct, otherwise an access denied message.
     """
     if security_code == SECURITY_CODE:
         records = display_patient_records()
@@ -178,6 +219,16 @@ SENTINEL_FORWARD = "__FORWARD_TO_ROOT__"
 
 # Ensure all imported sub-agents return the sentinel when asked to "show records".
 def _ensure_subagent_sentinel(sub_agent):
+    """
+    Ensures that a sub-agent has a rule to forward record-related requests to the root agent.
+
+    This function modifies the sub-agent's instruction to include a rule that triggers a
+    sentinel value (`__FORWARD_TO_ROOT__`) when the user asks to see records. This allows the
+    root agent to handle the secure display of records.
+
+    Args:
+        sub_agent: The sub-agent to modify.
+    """
     sentinel_rule = (
         "\n\nSecurity routing rule: If the user requests 'show records', 'display records', or 'view records',"
         " do NOT attempt to access or describe records. Instead respond exactly with the single token: "
@@ -198,17 +249,29 @@ _ensure_subagent_sentinel(gynec_doctor_assistant)
 _ensure_subagent_sentinel(general_physician_doctor_assistant)
 
 def root_handle_show_records():
-    """Prompt for security code and display records (root-only flow)."""
+    """
+    Prompts the user for a security code and displays patient records if the code is correct.
+
+    This function is intended to be called only by the root agent's interactive session when a
+    sub-agent forwards a request to show records.
+    """
     code = input("🔐 Enter security code to view records: ").strip()
     result = show_patient_records_secure(code)
     print("\n" + result + "\n")
 
 
 async def set_session_state(session_service, session_id: str, state: dict, app_name: str = "healthcare"):
-    """Set session-level state in a resilient way across different SessionService implementations.
+    """
+    Sets session-level state in a resilient way across different SessionService implementations.
 
-    Tries common method names and fallbacks so this works with InMemorySessionService and other
-    session implementations used in this codebase.
+    This function attempts to set the session state using various common method names and fallbacks
+    to ensure compatibility with different session service implementations.
+
+    Args:
+        session_service: The session service instance.
+        session_id: The ID of the session to update.
+        state: A dictionary containing the state to set.
+        app_name: The name of the application (defaults to "healthcare").
     """
     if not state:
         return
@@ -273,9 +336,19 @@ async def set_session_state(session_service, session_id: str, state: dict, app_n
 
 
 async def get_session_state(session_service, session_id: str, app_name: str = "healthcare") -> dict:
-    """Try to read session state in a resilient way from the session service.
+    """
+    Tries to read session state in a resilient way from the session service.
 
-    Returns a dict or empty dict if not available.
+    This function attempts to get the session state using various common method names and fallbacks
+    to ensure compatibility with different session service implementations.
+
+    Args:
+        session_service: The session service instance.
+        session_id: The ID of the session to read.
+        app_name: The name of the application (defaults to "healthcare").
+
+    Returns:
+        A dictionary containing the session state, or an empty dictionary if not available.
     """
     # Try common method names
     candidates = [
@@ -319,7 +392,15 @@ async def get_session_state(session_service, session_id: str, app_name: str = "h
     return {}
 
 async def get_runner() -> Runner:
-    """Initialize and return the healthcare runner with InMemory session service."""
+    """
+    Initializes and returns the healthcare agent runner.
+
+    This function sets up the root agent, its sub-agents, and the session service.
+    It also creates a tool for fetching session state and attaches it to the agents.
+
+    Returns:
+        A tuple containing the Runner instance and the session service instance.
+    """
     
     root_agent = Agent(
         name="healthcare_agent_app",
@@ -378,7 +459,16 @@ async def get_runner() -> Runner:
 
 
 async def main(query: str, runner: Runner) -> None:
-    """Execute a single query through the healthcare agent."""
+    """
+    Executes a single query through the healthcare agent.
+
+    This function sends a query to the agent runner and prints the final response.
+    It also handles the special case where a sub-agent forwards a request to show records.
+
+    Args:
+        query: The user's query to the agent.
+        runner: The Runner instance for the agent.
+    """
     
     # If the user directly asked to show records, handle at root level first.
     if "show records" in query.lower() or "display records" in query.lower() or "view records" in query.lower():
@@ -404,7 +494,103 @@ async def main(query: str, runner: Runner) -> None:
 
 
 async def interactive_session(runner: Runner, session_service: InMemorySessionService) -> None:
-    """Run interactive chat loop with the healthcare agent."""
+    """
+    Runs an interactive chat session with the healthcare agent.
+
+    This function provides a command-line interface for interacting with the agent.
+    It handles user input, special commands ('exit', 'audit', 'show session'), and the initial
+    patient information gathering flow.
+
+    Args:
+        runner: The Runner instance for the agent.
+        session_service: The session service instance.
+    """
+    
+    def _get_patient_details():
+        """Helper to collect patient's name, age, and optional weight with validation."""
+        patient_name = None
+        patient_age = None
+        patient_weight = None
+
+        while not patient_name:
+            patient_name = input("📝 Please enter the patient's name: ").strip()
+            if not patient_name:
+                print("⚠️  Name cannot be empty. Please try again.")
+
+        while patient_age is None:
+            try:
+                patient_age = int(input("📝 Please enter the patient's age: ").strip())
+                if patient_age < 0 or patient_age > 150:
+                    print("⚠️  Please enter a valid age (0-150).")
+                    patient_age = None
+            except ValueError:
+                print("⚠️  Age must be a number. Please try again.")
+        
+        while patient_weight is None:
+            w = input("📝 Please enter the patient's weight in kg (or press Enter to skip): ").strip()
+            if w == "":
+                patient_weight = None
+                break
+            try:
+                patient_weight = float(w)
+            except ValueError:
+                print("⚠️  Weight must be a number or blank to skip. Please try again.")
+        
+        return patient_name, patient_age, patient_weight
+    
+    def _get_interactant_name():
+        """Helper to collect the interactant's name with validation."""
+        interactant_name = None
+        while not interactant_name:
+            interactant_name = input("📝 Please enter your name (who is calling on behalf of the patient): ").strip()
+            if not interactant_name:
+                print("⚠️  Caller name cannot be empty. Please try again.")
+        return interactant_name
+
+    async def _handle_first_interaction(current_user_query: str):
+        """Orchestrates the first interaction to gather patient and interactant details."""
+        nonlocal first_interaction # Only first_interaction needs to be nonlocal
+        
+        # Local to this function
+        patient_name = None 
+        patient_age = None
+        patient_weight = None 
+        interactant_name = None 
+
+        resp = input("📝 Are you the patient? (y/n): ").strip().lower()
+        if resp.startswith("y"):
+            patient_name, patient_age, patient_weight = _get_patient_details()
+            interactant_name = patient_name
+            enriched_query = f"My name is {patient_name}. I am {patient_age} years old. {current_user_query}"
+        else:
+            patient_name, patient_age, patient_weight = _get_patient_details() # Collect for the patient
+            interactant_name = _get_interactant_name() # Collect for the caller
+            enriched_query = (
+                f"This is {interactant_name} calling on behalf of {patient_name} (age {patient_age}"
+                + (f", weight {patient_weight}kg" if patient_weight is not None else "")
+                + f"). {current_user_query}"
+            )
+        
+        # Insert patient record into database
+        insert_patient_record(patient_name, patient_age, patient_weight)
+
+        # Persist patient + interactant info in session state
+        try:
+            await set_session_state(
+                session_service,
+                "session_123",
+                {
+                    "patient_name": patient_name,
+                    "patient_age": patient_age,
+                    "patient_weight": patient_weight,
+                    "interactant_name": interactant_name,
+                },
+            )
+        except Exception as e:
+            logger.error(f"Error setting session state: {e}")
+
+        first_interaction = False
+        return enriched_query
     
     print("\n" + "="*60)
     print("🏥 Welcome to AI Healthcare!")
@@ -413,8 +599,6 @@ async def interactive_session(runner: Runner, session_service: InMemorySessionSe
     print("Type 'audit' to trigger A2A Government Audit Agent communication.")
     print("="*60 + "\n")
     
-    patient_name = None
-    patient_age = None
     first_interaction = True
     
     while True:
@@ -452,121 +636,12 @@ async def interactive_session(runner: Runner, session_service: InMemorySessionSe
                 print("⚠️  Please enter a valid question.")
                 continue
             
-            # On first interaction, clarify whether the caller is the patient or a proxy
-            if first_interaction and patient_name is None:
-                resp = input("📝 Are you the patient? (y/n): ").strip().lower()
-                if resp.startswith("y"):
-                    # Person is the patient — collect patient details for DB and interaction
-                    patient_name = input("📝 Please enter your name: ").strip()
-                    if not patient_name:
-                        print("⚠️  Name cannot be empty. Please try again.")
-                        continue
-
-                    while patient_age is None:
-                        try:
-                            patient_age = int(input("📝 Please enter your age: ").strip())
-                            if patient_age < 0 or patient_age > 150:
-                                print("⚠️  Please enter a valid age (0-150).")
-                                patient_age = None
-                        except ValueError:
-                            print("⚠️  Age must be a number. Please try again.")
-
-                    # Optionally collect weight for the patient's medical record
-                    patient_weight = None
-                    while patient_weight is None:
-                        w = input("📝 Please enter your weight in kg (or press Enter to skip): ").strip()
-                        if w == "":
-                            patient_weight = None
-                            break
-                        try:
-                            patient_weight = float(w)
-                        except ValueError:
-                            print("⚠️  Weight must be a number or blank to skip. Please try again.")
-
-                    # Insert patient record into database
-                    insert_patient_record(patient_name, patient_age, patient_weight)
-
-                    # Persist patient + interactant info in session state
-                    interactant_name = patient_name
-                    try:
-                        await set_session_state(
-                            session_service,
-                            "session_123",
-                            {
-                                "patient_name": patient_name,
-                                "patient_age": patient_age,
-                                "patient_weight": patient_weight,
-                                "interactant_name": interactant_name,
-                            },
-                        )
-                    except Exception:
-                        pass
-
-                    first_interaction = False
-
-                    enriched_query = f"My name is {patient_name}. I am {patient_age} years old. {user_query}"
-                    await main(enriched_query, runner)
-                else:
-                    # Caller is a proxy — collect patient details for DB and caller's name for interaction
-                    patient_name = input("📝 Please enter the patient's full name: ").strip()
-                    if not patient_name:
-                        print("⚠️  Patient name cannot be empty. Please try again.")
-                        continue
-
-                    while patient_age is None:
-                        try:
-                            patient_age = int(input("📝 Please enter the patient's age: ").strip())
-                            if patient_age < 0 or patient_age > 150:
-                                print("⚠️  Please enter a valid age (0-150).")
-                                patient_age = None
-                        except ValueError:
-                            print("⚠️  Age must be a number. Please try again.")
-
-                    patient_weight = None
-                    while patient_weight is None:
-                        w = input("📝 Please enter the patient's weight in kg (or press Enter to skip): ").strip()
-                        if w == "":
-                            patient_weight = None
-                            break
-                        try:
-                            patient_weight = float(w)
-                        except ValueError:
-                            print("⚠️  Weight must be a number or blank to skip. Please try again.")
-
-                    # Who is calling on behalf of the patient?
-                    interactant_name = input("📝 Please enter your name (who is calling on behalf of the patient): ").strip()
-                    if not interactant_name:
-                        print("⚠️  Caller name cannot be empty. Please try again.")
-                        continue
-
-                    # Insert patient record into database
-                    insert_patient_record(patient_name, patient_age, patient_weight)
-
-                    # Persist patient + interactant info in session state
-                    try:
-                        await set_session_state(
-                            session_service,
-                            "session_123",
-                            {
-                                "patient_name": patient_name,
-                                "patient_age": patient_age,
-                                "patient_weight": patient_weight,
-                                "interactant_name": interactant_name,
-                            },
-                        )
-                    except Exception:
-                        pass
-
-                    first_interaction = False
-
-                    enriched_query = (
-                        f"This is {interactant_name} calling on behalf of {patient_name} (age {patient_age}"
-                        + (f", weight {patient_weight}kg" if patient_weight is not None else "")
-                        + f"). {user_query}"
-                    )
-                    await main(enriched_query, runner)
+            if first_interaction:
+                enriched_query = await _handle_first_interaction(user_query)
+                await main(enriched_query, runner)
             else:
                 await main(user_query, runner)
+
             
         except KeyboardInterrupt:
             print("\n\n👋 Session interrupted. Goodbye!")

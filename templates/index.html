@@ -1,0 +1,31 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Government Health Authority</title>
+    <style>
+      body{font-family:Inter,Segoe UI,Arial;background:linear-gradient(135deg,#0f172a,#1e293b);color:#111;margin:0;padding:30px}
+      .card{max-width:1000px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 10px 40px rgba(2,6,23,.4)}
+      .hero{display:flex;align-items:center;gap:20px;padding:28px 36px;background:linear-gradient(90deg,#083e77,#0a4b7a);color:#fff}
+      .seal{font-size:56px}
+      h1{margin:0;font-size:22px}
+      p.subtitle{margin:4px 0 0;opacity:.9}
+      .actions{padding:20px 36px;border-top:1px solid #f1f5f9;text-align:center}
+      .btn{display:inline-block;padding:12px 20px;background:linear-gradient(90deg,#0f172a,#0b5ea8);color:#fff;border-radius:8px;text-decoration:none;font-weight:600}
+      .small{font-size:13px;color:#64748b;margin-top:8px}
+    </style></head><body>
+      <div class="card">
+        <div class="hero">
+          <div class="seal">🏛️</div>
+          <div>
+            <h1>Government Health Authority — Audit Dashboard</h1>
+            <p class="subtitle">Official audit portal for healthcare compliance and reporting</p>
+            <div class="small">Generated: {{ NOW }}</div>
+          </div>
+        </div>
+        <div class="actions">
+          <a class="btn" href="/audit-report">📊 View Audit Report</a>
+          &nbsp;&nbsp;
+          <a class="btn" href="/api/records">📋 API Records (JSON)</a>
+          <div class="small">Records are read-only here. Access to raw patient data is restricted and logged.</div>
+        </div>
+      </div>
+    </body></html>
+    

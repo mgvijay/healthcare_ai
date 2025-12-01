@@ -1,0 +1,33 @@
+graph TD
+    subgraph "User Interaction"
+        User
+    end
+
+    subgraph "Core Agent System (ADK)"
+        RootAgent("Root Agent (agent.py)")
+        GeneralPhysician("General Physician Agent")
+        ENT("ENT Agent")
+        Gynec("Gynecology Agent")
+    end
+
+    subgraph "Data & Services"
+        Database("healthcare.db (SQLite)")
+        AuditServer("Audit Server (audit_server.py)")
+        GovAuditAgent("Gov Audit Agent (agents/gov_audit_agent.py)")
+    end
+
+    subgraph "External Interfaces"
+        WebBrowser
+        CLI
+    end
+
+    User -- "Text/Voice Query" --> RootAgent
+    RootAgent -- "Orchestrates & Delegates" --> GeneralPhysician
+    RootAgent -- "Orchestrates & Delegates" --> ENT
+    RootAgent -- "Orchestrates & Delegates" --> Gynec
+    RootAgent -- "Reads/Writes" --> Database
+    AuditServer -- "Reads" --> Database
+    GovAuditAgent -- "A2A Request" --> RootAgent
+    WebBrowser -- "HTTP Request" --> AuditServer
+    CLI -- "Executes" --> GovAuditAgent
+    User -- "Runs" --> CLI
